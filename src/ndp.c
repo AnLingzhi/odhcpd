@@ -295,18 +295,27 @@ static void ndp_netevent_cb(unsigned long event, struct netevent_handler_info *i
 
 		/* LAN Priority Logic: Ignore neighbors on Master interface if they belong to a Slave subnet */
 		if (add && iface->master) {
-			struct interface *c;
-			avl_for_each_element(&interfaces, c, avl) {
-				if (!c->master && c->ndp != MODE_DISABLED) {
-					size_t i;
-					for (i = 0; i < c->addr6_len; ++i) {
-						struct odhcpd_ipaddr *addr = &c->addr6[i];
-						if (addr->prefix_len > 128) continue;
+			/* Check 1: If this IP is already proxied on the Master interface,
+			 * it means we learned it from a Slave interface. This is a reflection. */
+			if (netlink_get_interface_proxy_neigh(iface->ifindex, &info->neigh.dst.in6) == 1) {
+				return;
+			}
 
-						if (!odhcpd_bmemcmp(&addr->addr.in6, &info->neigh.dst.in6, addr->prefix_len)) {
-							/* Found match on slave interface, ignoring reflection */
-							return;
-						}
+			/* Check 2: If we are in Relay mode, Master and Slave share the same prefix.
+			 * If the neighbor matches a prefix configured on the Master interface (GUA),
+			 * it is likely a LAN device reflected back.
+			 * We ignore GUA neighbors on Master to prevent wrong route learning.
+			 * Link-Local neighbors are still allowed for gateway communication. */
+			if (iface->ndp == MODE_RELAY && !IN6_IS_ADDR_LINKLOCAL(&info->neigh.dst.in6)) {
+				size_t i;
+				for (i = 0; i < iface->addr6_len; ++i) {
+					struct odhcpd_ipaddr *addr = &iface->addr6[i];
+					/* Only consider subnets (e.g. /64), not specific host addresses (/128) */
+					if (addr->prefix_len > 64) continue;
+
+					if (!odhcpd_bmemcmp(&addr->addr.in6, &info->neigh.dst.in6, addr->prefix_len)) {
+						/* Found match on Master prefix, ignoring to prevent route flapping */
+						return;
 					}
 				}
 			}
