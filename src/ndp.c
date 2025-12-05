@@ -444,6 +444,16 @@ static void handle_solicit(void *addr, void *data, size_t len,
 /* Use rtnetlink to modify kernel routes */
 static void setup_route(struct in6_addr *addr, struct interface *iface, bool add)
 {
+	/* Anti-Reflection Guard */
+	/* If this event is on the Master (WAN) interface */
+	if (add && iface->master) {
+		/* And the neighbor address is NOT a Link-Local address (i.e. it is a Global Unicast Address like 240e...) */
+		if (!IN6_IS_ADDR_LINKLOCAL(addr)) {
+			/* Then it must be a reflection from our own LAN. IGNORE IT. */
+			return;
+		}
+	}
+
 	char ipbuf[INET6_ADDRSTRLEN];
 
 	inet_ntop(AF_INET6, addr, ipbuf, sizeof(ipbuf));
