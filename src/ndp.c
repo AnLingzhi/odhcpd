@@ -293,32 +293,17 @@ static void ndp_netevent_cb(unsigned long event, struct netevent_handler_info *i
 			break;
 		}
 
-		/* LAN Priority Logic: Ignore neighbors on Master interface if they belong to a Slave subnet */
-		if (add && iface->master) {
-			/* Check 1: If this IP is already proxied on the Master interface,
-			 * it means we learned it from a Slave interface. This is a reflection. */
-			if (netlink_get_interface_proxy_neigh(iface->ifindex, &info->neigh.dst.in6) == 1) {
-				return;
-			}
-
-			/* Check 2: If we are in Relay mode, Master and Slave share the same prefix.
-			 * If the neighbor matches a prefix configured on the Master interface (GUA),
-			 * it is likely a LAN device reflected back.
-			 * We ignore GUA neighbors on Master to prevent wrong route learning.
-			 * Link-Local neighbors are still allowed for gateway communication. */
-			if (iface->ndp == MODE_RELAY && !IN6_IS_ADDR_LINKLOCAL(&info->neigh.dst.in6)) {
-				size_t i;
-				for (i = 0; i < iface->addr6_len; ++i) {
-					struct odhcpd_ipaddr *addr = &iface->addr6[i];
-					/* Only consider subnets (e.g. /64), not specific host addresses (/128) */
-					if (addr->prefix_len > 64) continue;
-
-					if (!odhcpd_bmemcmp(&addr->addr.in6, &info->neigh.dst.in6, addr->prefix_len)) {
-						/* Found match on Master prefix, ignoring to prevent route flapping */
-						return;
-					}
-				}
-			}
+		/* Anti-Reflection Guard:
+		 * If we receive a neighbor event on the Master (WAN) interface,
+		 * and it is a Global Unicast Address (GUA), it is almost certainly
+		 * a reflection of a LAN client (since we share the prefix in Relay mode).
+		 * We must IGNORE it to prevent:
+		 * 1. Creating a proxy neighbor on LAN (looping traffic).
+		 * 2. Creating a host route to WAN (breaking connectivity).
+		 * Link-Local addresses are exempted as they are needed for Gateway communication.
+		 */
+		if (add && iface->master && !IN6_IS_ADDR_LINKLOCAL(&info->neigh.dst.in6)) {
+			return;
 		}
 
 		if (add &&
@@ -444,16 +429,6 @@ static void handle_solicit(void *addr, void *data, size_t len,
 /* Use rtnetlink to modify kernel routes */
 static void setup_route(struct in6_addr *addr, struct interface *iface, bool add)
 {
-	/* Anti-Reflection Guard */
-	/* If this event is on the Master (WAN) interface */
-	if (add && iface->master) {
-		/* And the neighbor address is NOT a Link-Local address (i.e. it is a Global Unicast Address like 240e...) */
-		if (!IN6_IS_ADDR_LINKLOCAL(addr)) {
-			/* Then it must be a reflection from our own LAN. IGNORE IT. */
-			return;
-		}
-	}
-
 	char ipbuf[INET6_ADDRSTRLEN];
 
 	inet_ntop(AF_INET6, addr, ipbuf, sizeof(ipbuf));
