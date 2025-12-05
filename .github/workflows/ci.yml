@@ -105,10 +105,10 @@ jobs:
       - name: Build libnl-tiny
         working-directory: depends/libnl-tiny
         run: |
+          sed -i 's/SHARED/STATIC/g' CMakeLists.txt
           cmake \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
-            -DBUILD_SHARED_LIBS=OFF \
             --install-prefix ${GITHUB_WORKSPACE}/build \
             -B . -S .
           make
@@ -117,12 +117,12 @@ jobs:
       - name: Build libubox
         working-directory: depends/libubox
         run: |
+          sed -i 's/SHARED/STATIC/g' CMakeLists.txt
           cmake \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
             -DBUILD_LUA=OFF \
             -DBUILD_EXAMPLES=OFF \
-            -DBUILD_SHARED_LIBS=OFF \
             --install-prefix ${GITHUB_WORKSPACE}/build \
             -B . -S .
           make
@@ -131,12 +131,11 @@ jobs:
       - name: Build ubus
         working-directory: depends/ubus
         run: |
+          sed -i 's/SHARED/STATIC/g' CMakeLists.txt
           cmake \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
             -DBUILD_LUA=OFF \
-            -DBUILD_STATIC=ON \
-            -DBUILD_SHARED_LIBS=OFF \
             -DBUILD_EXAMPLES=OFF \
             --install-prefix ${GITHUB_WORKSPACE}/build \
             -B . -S .
@@ -146,21 +145,18 @@ jobs:
       - name: Build uci
         working-directory: depends/uci
         run: |
+          sed -i 's/SHARED/STATIC/g' CMakeLists.txt
           cmake \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
             -DBUILD_LUA=OFF \
-            -DBUILD_STATIC=ON \
-            -DBUILD_SHARED_LIBS=OFF \
             --install-prefix ${GITHUB_WORKSPACE}/build \
             -B . -S .
           make
           make install
 
-      - name: Remove shared libraries to force static linking
-        run: |
-          find ${GITHUB_WORKSPACE}/build -name "*.so*" -type f -delete
-          find ${GITHUB_WORKSPACE}/build -name "*.so*" -type l -delete
+      - name: Inspect build directory (Debug)
+        run: ls -R ${GITHUB_WORKSPACE}/build
 
       - id: full
         name: Build odhcpd (full)
