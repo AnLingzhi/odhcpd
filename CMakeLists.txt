@@ -48,6 +48,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${libuci})
 find_path(ubox_include_dir uloop.h PATH_SUFFIXES libubox)
 target_include_directories(${PROJECT_NAME} PRIVATE ${ubox_include_dir})
 find_library(libubox ubox)
+# libubox is also linked below if UBUS is enabled, but we need it here too
 target_link_libraries(${PROJECT_NAME} PRIVATE ${libubox})
 
 find_path(libnl-tiny_include_dir netlink-generic.h PATH_SUFFIXES libnl-tiny)
@@ -68,7 +69,16 @@ if(${UBUS})
 	find_path(ubus_include_dir libubus.h)
 	target_include_directories(${PROJECT_NAME} PRIVATE ${ubus_include_dir})
 	find_library(libubus ubus)
-	target_link_libraries(${PROJECT_NAME} PRIVATE ${libubus})
+	# Important: libubus depends on libubox symbols (like usock).
+	# When static linking, order matters: dependent lib first, provider last.
+	# libubus uses symbols from libubox. So libubus should come before libubox.
+	# We already linked libubox above, but let's be explicit here to ensure correct order for this block.
+	# However, target_link_libraries usually appends.
+	# If we link libubus here, it will be appended.
+	# We need libubus BEFORE libubox.
+	# Since libubox was linked above, it might be after libubus if we are lucky or if CMake reorders.
+	# But to be safe, let's link libubox AGAIN after libubus.
+	target_link_libraries(${PROJECT_NAME} PRIVATE ${libubus} ${libubox})
 endif(${UBUS})
 
 if(${DHCPV4_SUPPORT})

@@ -141,6 +141,18 @@ jobs:
             -B . -S .
           make
           make install
+          # Manually create libubus.a from libubus.a (already static) and libubus-io.a if needed?
+          # Actually libubus seems to be split. Let's check.
+          # The error is: undefined reference to `usock'
+          # `usock` is in libubox.
+          # It seems we need to link libubox when using libubus? No, odhcpd links both.
+          # Wait, the error is in libubus-io.c.o which is part of libubus.
+          # It seems libubus static library doesn't include libubox symbols (normal for static libs).
+          # But odhcpd links against libubus AND libubox.
+          # The order of linking matters!
+          # target_link_libraries(odhcpd ... libubus libubox ...)
+          # If libubus depends on libubox, libubus should come BEFORE libubox in the linker command line.
+          # Let's check CMakeLists.txt of odhcpd.
 
       - name: Build uci
         working-directory: depends/uci
