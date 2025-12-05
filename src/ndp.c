@@ -288,7 +288,8 @@ static void ndp_netevent_cb(unsigned long event, struct netevent_handler_info *i
 		if (add) {
 			char ipbuf_dbg[INET6_ADDRSTRLEN];
 			inet_ntop(AF_INET6, &info->neigh.dst.in6, ipbuf_dbg, sizeof(ipbuf_dbg));
-			syslog(LOG_DEBUG, "DEBUG: NEIGH_ADD %s on %s (master=%d, is_ll=%d)",
+			// Use fprintf(stderr, ...) to force output to console, bypassing syslog level issues
+			fprintf(stderr, "DEBUG: NEIGH_ADD %s on %s (master=%d, is_ll=%d)\n",
 			       ipbuf_dbg, iface->name, iface->master, IN6_IS_ADDR_LINKLOCAL(&info->neigh.dst.in6));
 		}
 
@@ -304,7 +305,7 @@ static void ndp_netevent_cb(unsigned long event, struct netevent_handler_info *i
 		 */
 		if (add && iface->master && !IN6_IS_ADDR_LINKLOCAL(&info->neigh.dst.in6)) {
 			// 打印日志方便调试，确认拦截生效 (生产环境可去掉日志)
-			syslog(LOG_WARNING, "[Generic-Block] Ignored GUA neighbor on Master interface %s (Preventing Loop)",
+			fprintf(stderr, "[Generic-Block] Ignored GUA neighbor on Master interface %s (Preventing Loop)\n",
 			       iface->name);
 			return; /* 立即返回，不执行后续任何代理或路由操作 */
 		}
