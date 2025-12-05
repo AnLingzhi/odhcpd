@@ -157,6 +157,11 @@ jobs:
           make
           make install
 
+      - name: Remove shared libraries to force static linking
+        run: |
+          find ${GITHUB_WORKSPACE}/build -name "*.so*" -type f -delete
+          find ${GITHUB_WORKSPACE}/build -name "*.so*" -type l -delete
+
       - id: full
         name: Build odhcpd (full)
         env:
