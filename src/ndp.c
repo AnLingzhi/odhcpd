@@ -284,6 +284,14 @@ static void ndp_netevent_cb(unsigned long event, struct netevent_handler_info *i
 		add = false;
 		_o_fallthrough;
 	case NETEV_NEIGH6_ADD:
+		// DEBUG: Inspect all NEIGH6_ADD events
+		if (add) {
+			char ipbuf_dbg[INET6_ADDRSTRLEN];
+			inet_ntop(AF_INET6, &info->neigh.dst.in6, ipbuf_dbg, sizeof(ipbuf_dbg));
+			syslog(LOG_DEBUG, "DEBUG: NEIGH_ADD %s on %s (master=%d, is_ll=%d)",
+			       ipbuf_dbg, iface->name, iface->master, IN6_IS_ADDR_LINKLOCAL(&info->neigh.dst.in6));
+		}
+
 		/* ================= [Generic Fix Start] ================= */
 		/* * 通用防反射逻辑 (Generic Anti-Reflection):
 		 * 原理：在 IPv6 中继 (Relay) 模式下，Master (WAN) 接口连接上级网关。
