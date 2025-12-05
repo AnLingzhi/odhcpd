@@ -303,20 +303,10 @@ static void ndp_netevent_cb(unsigned long event, struct netevent_handler_info *i
 		/* ================= [Generic Fix End] ================= */
 
 		if (info->neigh.flags & NTF_PROXY) {
-			/* TODO: This is only a workaround. We should really check
-			 * if we set up the proxy ourselves.
-			 * But as we don't keep track of the proxy neighbors
-			 * we set up, we can't do this check properly. */
 			if (add) {
-				struct interface *c;
-				avl_for_each_element(&interfaces, c, avl) {
-					if (c != iface &&
-							!odhcpd_bmemcmp(&c->in6_addr,
-							&info->neigh.dst.in6, 128)) {
-						delete_proxy_neigh(iface, &info->neigh.dst.in6);
-						break;
-					}
-				}
+				netlink_setup_proxy_neigh(&info->neigh.dst.in6, iface->ifindex, false);
+				setup_route(&info->neigh.dst.in6, iface, false);
+				netlink_dump_neigh_table(false);
 			}
 			break;
 		}
