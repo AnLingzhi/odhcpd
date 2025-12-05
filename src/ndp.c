@@ -293,6 +293,25 @@ static void ndp_netevent_cb(unsigned long event, struct netevent_handler_info *i
 			break;
 		}
 
+		/* LAN Priority Logic: Ignore neighbors on Master interface if they belong to a Slave subnet */
+		if (add && iface->master) {
+			struct interface *c;
+			avl_for_each_element(&interfaces, c, avl) {
+				if (!c->master && c->ndp != MODE_DISABLED) {
+					size_t i;
+					for (i = 0; i < c->addr6_len; ++i) {
+						struct odhcpd_ipaddr *addr = &c->addr6[i];
+						if (addr->prefix_len > 128) continue;
+
+						if (!odhcpd_bmemcmp(&addr->addr.in6, &info->neigh.dst.in6, addr->prefix_len)) {
+							/* Found match on slave interface, ignoring reflection */
+							return;
+						}
+					}
+				}
+			}
+		}
+
 		if (add &&
 		    !(info->neigh.state &
 		      (NUD_REACHABLE|NUD_STALE|NUD_DELAY|NUD_PROBE|NUD_PERMANENT|NUD_NOARP)))
