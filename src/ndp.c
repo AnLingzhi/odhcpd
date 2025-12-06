@@ -284,33 +284,6 @@ static void ndp_netevent_cb(unsigned long event, struct netevent_handler_info *i
 		add = false;
 		_o_fallthrough;
 	case NETEV_NEIGH6_ADD:
-		// DEBUG: Inspect all NEIGH6_ADD events
-		if (add) {
-			char ipbuf_dbg[INET6_ADDRSTRLEN];
-			inet_ntop(AF_INET6, &info->neigh.dst.in6, ipbuf_dbg, sizeof(ipbuf_dbg));
-			// Use fprintf(stderr, ...) to force output to console, bypassing syslog level issues
-			fprintf(stderr, "DEBUG: NEIGH_ADD %s on %s (master=%d, is_ll=%d)\n",
-			       ipbuf_dbg, iface->name, iface->master, IN6_IS_ADDR_LINKLOCAL(&info->neigh.dst.in6));
-		}
-
-		/* ================= [Generic Fix Start] ================= */
-		/* * 通用防反射逻辑 (Generic Anti-Reflection):
-		 * 原理：在 IPv6 中继 (Relay) 模式下，Master (WAN) 接口连接上级网关。
-		 * 上级网关 (ISP) 必定使用 Link-Local (fe80::) 地址进行 NDP 通信。
-		 * 如果在 Master 接口上收到了公网 IP (Global Unicast Address) 的邻居通告：
-		 * 1. 在 5G/4G 这种点对点网络中，这 100% 是 LAN 侧设备的回环反射。
-		 * 2. 即使是以太网接入，我们也不需要学习上级网段中其他邻居的路由（因为有默认路由）。
-		 * * 结论：只要是 Master 接口收到非 fe80 开头的邻居，一律忽略。
-		 * 这不依赖接口名字，只依赖配置文件中的 'option master 1'。
-		 */
-		if (add && iface->master && !IN6_IS_ADDR_LINKLOCAL(&info->neigh.dst.in6)) {
-			// 打印日志方便调试，确认拦截生效 (生产环境可去掉日志)
-			fprintf(stderr, "[Generic-Block] Ignored GUA neighbor on Master interface %s (Preventing Loop)\n",
-			       iface->name);
-			return; /* 立即返回，不执行后续任何代理或路由操作 */
-		}
-		/* ================= [Generic Fix End] ================= */
-
 		if (info->neigh.flags & NTF_PROXY) {
 			if (add) {
 				netlink_setup_proxy_neigh(&info->neigh.dst.in6, iface->ifindex, false);
