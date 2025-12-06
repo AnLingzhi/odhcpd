@@ -369,6 +369,8 @@ static void handle_solicit(void *addr, void *data, size_t len,
 	char ipbuf[INET6_ADDRSTRLEN];
 	uint8_t mac[6];
 	bool is_self_sent;
+	uint8_t src_mac[6];
+	bool have_src_mac = false;
 
 	/* Solicitation is for duplicate address detection */
 	bool ns_is_dad = IN6_IS_ADDR_UNSPECIFIED(&ip6->ip6_src);
@@ -391,9 +393,35 @@ static void handle_solicit(void *addr, void *data, size_t len,
 	debug("Got a NS for %s on %s", ipbuf, iface->name);
 
 	odhcpd_get_mac(iface, mac);
-	is_self_sent = !memcmp(ll->sll_addr, mac, sizeof(mac));
-	if (is_self_sent && !iface->master)
-		return; /* Looped back */
+	if (ll->sll_halen == ETH_ALEN) {
+		memcpy(src_mac, ll->sll_addr, ETH_ALEN);
+		have_src_mac = true;
+	} else {
+		uint8_t *end = (uint8_t *)data + len;
+		uint8_t *optp = (uint8_t *)(req + 1);
+		while (optp + sizeof(struct nd_opt_hdr) <= end) {
+			struct nd_opt_hdr *opt = (struct nd_opt_hdr *)optp;
+			if (opt->nd_opt_len == 0)
+				break;
+			uint8_t opt_len_bytes = opt->nd_opt_len * 8;
+			if (optp + opt_len_bytes > end)
+				break;
+			if (opt->nd_opt_type == ND_OPT_SOURCE_LINKADDR && opt->nd_opt_len >= 1) {
+				memcpy(src_mac, optp + sizeof(struct nd_opt_hdr), ETH_ALEN);
+				have_src_mac = true;
+				break;
+			}
+			optp += opt_len_bytes;
+		}
+	}
+	is_self_sent = have_src_mac && !memcmp(src_mac, mac, ETH_ALEN);
+	if (is_self_sent) {
+		char macstr[18];
+		snprintf(macstr, sizeof(macstr), "%02x:%02x:%02x:%02x:%02x:%02x",
+			src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
+		debug("Ignored looped-back NDP packet from %s on %s", macstr, iface->name);
+		return;
+	}
 
 	avl_for_each_element(&interfaces, c, avl) {
 		if (iface != c && c->ndp == MODE_RELAY &&

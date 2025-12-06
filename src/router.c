@@ -1146,6 +1146,28 @@ static void handle_icmpv6(void *addr, void *data, size_t len,
 	if (!router_icmpv6_valid(addr, data, len))
 		return;
 
+	if (hdr->icmp6_type == ND_ROUTER_SOLICIT) {
+		struct nd_router_solicit *rs = (struct nd_router_solicit *)data;
+		uint8_t *end = (uint8_t *)data + len;
+		struct icmpv6_opt *opt;
+		uint8_t *mac_ptr = NULL;
+		uint8_t mac[6];
+		icmpv6_for_each_option(opt, &rs[1], end) {
+			if (opt->type == ND_OPT_SOURCE_LINKADDR && opt->len >= 1) {
+				mac_ptr = opt->data;
+				break;
+			}
+		}
+		if (mac_ptr) {
+			odhcpd_get_mac(iface, mac);
+			if (!memcmp(mac_ptr, mac, 6)) {
+				debug("Ignored looped-back RS packet from %02x:%02x:%02x:%02x:%02x:%02x on %s",
+					mac_ptr[0], mac_ptr[1], mac_ptr[2], mac_ptr[3], mac_ptr[4], mac_ptr[5], iface->name);
+				return;
+			}
+		}
+	}
+
 	if ((iface->ra == MODE_SERVER && !iface->master)) { /* Server mode */
 		if (hdr->icmp6_type == ND_ROUTER_SOLICIT)
 			send_router_advert(iface, &from->sin6_addr);
