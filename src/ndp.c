@@ -393,6 +393,18 @@ static void handle_solicit(void *addr, void *data, size_t len,
 	debug("Got a NS for %s on %s", ipbuf, iface->name);
 
 	odhcpd_get_mac(iface, mac);
+	{
+		char pkt_mac[18];
+		char my_mac_str[18];
+		if (ll->sll_halen == ETH_ALEN)
+			snprintf(pkt_mac, sizeof(pkt_mac), "%02x:%02x:%02x:%02x:%02x:%02x",
+				ll->sll_addr[0], ll->sll_addr[1], ll->sll_addr[2], ll->sll_addr[3], ll->sll_addr[4], ll->sll_addr[5]);
+		else
+			snprintf(pkt_mac, sizeof(pkt_mac), "unknown");
+		snprintf(my_mac_str, sizeof(my_mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+			mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		notice("DIAG_NS: Iface=%s, Pkt_SrcMAC=%s, MyMAC=%s", iface->name, pkt_mac, my_mac_str);
+	}
 	if (ll->sll_halen == ETH_ALEN) {
 		memcpy(src_mac, ll->sll_addr, ETH_ALEN);
 		have_src_mac = true;
@@ -415,13 +427,6 @@ static void handle_solicit(void *addr, void *data, size_t len,
 		}
 	}
 	is_self_sent = have_src_mac && !memcmp(src_mac, mac, ETH_ALEN);
-	if (is_self_sent) {
-		char macstr[18];
-		snprintf(macstr, sizeof(macstr), "%02x:%02x:%02x:%02x:%02x:%02x",
-			src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
-		debug("Ignored looped-back NDP packet from %s on %s", macstr, iface->name);
-		return;
-	}
 
 	avl_for_each_element(&interfaces, c, avl) {
 		if (iface != c && c->ndp == MODE_RELAY &&

@@ -1151,20 +1151,25 @@ static void handle_icmpv6(void *addr, void *data, size_t len,
 		uint8_t *end = (uint8_t *)data + len;
 		struct icmpv6_opt *opt;
 		uint8_t *mac_ptr = NULL;
-		uint8_t mac[6];
 		icmpv6_for_each_option(opt, &rs[1], end) {
 			if (opt->type == ND_OPT_SOURCE_LINKADDR && opt->len >= 1) {
 				mac_ptr = opt->data;
 				break;
 			}
 		}
-		if (mac_ptr) {
-			odhcpd_get_mac(iface, mac);
-			if (!memcmp(mac_ptr, mac, 6)) {
-				debug("Ignored looped-back RS packet from %02x:%02x:%02x:%02x:%02x:%02x on %s",
-					mac_ptr[0], mac_ptr[1], mac_ptr[2], mac_ptr[3], mac_ptr[4], mac_ptr[5], iface->name);
-				return;
-			}
+		{
+			char pkt_mac[18];
+			uint8_t mymac[6];
+			char my_mac_str[18];
+			if (mac_ptr)
+				snprintf(pkt_mac, sizeof(pkt_mac), "%02x:%02x:%02x:%02x:%02x:%02x",
+					mac_ptr[0], mac_ptr[1], mac_ptr[2], mac_ptr[3], mac_ptr[4], mac_ptr[5]);
+			else
+				snprintf(pkt_mac, sizeof(pkt_mac), "unknown");
+			odhcpd_get_mac(iface, mymac);
+			snprintf(my_mac_str, sizeof(my_mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+				mymac[0], mymac[1], mymac[2], mymac[3], mymac[4], mymac[5]);
+			notice("DIAG_RS: Iface=%s, Pkt_SrcMAC=%s, MyMAC=%s", iface->name, pkt_mac, my_mac_str);
 		}
 	}
 
