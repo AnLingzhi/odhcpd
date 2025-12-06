@@ -526,7 +526,41 @@ static void router_add_ra_pio(struct interface *iface,
 	     pio->length);
 }
 
-static void router_clear_ra_pio(time_t now,
+static void router_clear_duplicated_ra_pio(struct interface *iface)
+{
+	size_t pio_cnt = iface->pio_cnt;
+	char ipv6_str[INET6_ADDRSTRLEN];
+
+	for (size_t i = 0; i < iface->pio_cnt; i++) {
+		struct ra_pio *pio_a = &iface->pios[i];
+		size_t j = i + 1;
+
+		while (j < iface->pio_cnt) {
+			struct ra_pio *pio_b = &iface->pios[j];
+
+			if (!memcmp(pio_a, pio_b, ra_pio_cmp_len)) {
+				warn("rfc9096: %s: clear duplicated %s/%u",
+				     iface->ifname,
+				     inet_ntop(AF_INET6, &pio_a->prefix, ipv6_str, sizeof(ipv6_str)),
+				     pio_a->length);
+
+				iface->pios[j] = iface->pios[iface->pio_cnt - 1];
+				iface->pio_cnt--;
+			} else {
+				j++;
+			}
+		}
+	}
+
+	if (iface->pio_cnt != pio_cnt) {
+		struct ra_pio *new_pios = realloc(iface->pios, sizeof(struct ra_pio) * iface->pio_cnt);
+
+		if (new_pios)
+			iface->pios = new_pios;
+	}
+}
+
+static void router_clear_expired_ra_pio(time_t now,
 	struct interface *iface)
 {
 	size_t i = 0, pio_cnt = iface->pio_cnt;
@@ -536,14 +570,12 @@ static void router_clear_ra_pio(time_t now,
 		struct ra_pio *cur_pio = &iface->pios[i];
 
 		if (ra_pio_expired(cur_pio, now)) {
-			info("rfc9096: %s: clear %s/%u",
+			info("rfc9096: %s: clear expired %s/%u",
 			     iface->ifname,
 			     inet_ntop(AF_INET6, &cur_pio->prefix, ipv6_str, sizeof(ipv6_str)),
 			     cur_pio->length);
 
-			if (i + 1 < iface->pio_cnt)
-				iface->pios[i] = iface->pios[iface->pio_cnt - 1];
-
+			iface->pios[i] = iface->pios[iface->pio_cnt - 1];
 			iface->pio_cnt--;
 		} else {
 			i++;
@@ -611,7 +643,7 @@ static int send_router_advert(struct interface *iface, const struct in6_addr *fr
 	bool valid_prefix = false;
 	char buf[INET6_ADDRSTRLEN];
 
-	router_clear_ra_pio(now, iface);
+	router_clear_expired_ra_pio(now, iface);
 
 	memset(&adv, 0, sizeof(adv));
 	adv.h.nd_ra_type = ND_ROUTER_ADVERT;
@@ -823,6 +855,8 @@ static int send_router_advert(struct interface *iface, const struct in6_addr *fr
 			router_add_ra_pio(iface, addr);
 		}
 	}
+
+	router_clear_duplicated_ra_pio(iface);
 
 	iov[IOV_RA_PFXS].iov_base = (char *)pfxs;
 	iov[IOV_RA_PFXS].iov_len = pfxs_cnt * sizeof(*pfxs);
